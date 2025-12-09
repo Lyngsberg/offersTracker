@@ -1,0 +1,1 @@
+Track weakly offers from supermarkedts such as Netto
