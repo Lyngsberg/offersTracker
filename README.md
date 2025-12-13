@@ -1,1 +1,1 @@
-Track weakly offers from supermarkets such as Netto
+Track weekly offers from supermarkets such as Netto

@@ -13,7 +13,8 @@ from selenium.webdriver.chrome.service import Service
 # --- Configuration ---
 NETTO_PAGE_URL = 'https://netto.dk/netto-avisen/' 
 BASE_DATA_FOLDER = 'data/' 
-MAX_PAGES_TO_SCROLL = 50 
+LOG_FILE_PATH = 'log/netto_log.txt'
+MAX_PAGES_TO_SCROLL = 60 
 
 # --- Selectors ---
 INITIAL_LINK_SELECTOR = 'li.relative.snap-start > button' 
@@ -40,6 +41,24 @@ def setup_driver():
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
+def write_log_line(status, message):
+    """
+    Writes a single line to the log file.
+    """
+    try:
+        # Ensure log directory exists
+        log_dir = os.path.dirname(LOG_FILE_PATH)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        with open(LOG_FILE_PATH, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] [{status}] {message}\n")
+            
+    except Exception as e:
+        print(f"CRITICAL: Could not write to log file: {e}")
+
 def handle_cookie_banner(driver):
     try:
         driver.execute_script("""
@@ -65,11 +84,16 @@ def get_folder_name_from_text(raw_text):
         return f"offer_week_{int(time.time())}"
 
 def download_image(image_url: str, save_path: str, filename: str):
+    """
+    Returns True if downloaded successfully, False otherwise.
+    """
     try:
-        if not image_url or not image_url.startswith('http'): return
+        if not image_url or not image_url.startswith('http'): return False
         file_ext = '.webp' if '.webp' in image_url else '.jpg'
         full_path = os.path.join(save_path, f"{filename}{file_ext}")
-        if os.path.exists(full_path): return
+        
+        # Skip if already exists
+        if os.path.exists(full_path): return False
 
         response = requests.get(image_url, stream=True, timeout=15)
         response.raise_for_status()
@@ -77,9 +101,13 @@ def download_image(image_url: str, save_path: str, filename: str):
         with open(full_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        print(f"   -> Downloaded: {filename}{file_ext}")
+        
+        print(f"   -> Successfully downloaded: {filename}{file_ext}")
+        return True
+
     except Exception as e:
         print(f"   -> ERROR downloading {image_url}: {e}")
+        return False
 
 def get_all_image_urls(driver):
     """Returns a set of all flyer image URLs currently in the DOM."""
@@ -97,6 +125,10 @@ def get_all_image_urls(driver):
 def scrape_netto_flyer():
     driver = setup_driver()
     
+    # State tracking variables
+    images_downloaded_count = 0
+    fatal_error_message = None
+
     try:
         driver.get(NETTO_PAGE_URL)
         wait = WebDriverWait(driver, 15)
@@ -156,7 +188,9 @@ def scrape_netto_flyer():
                 retries -= 1
             
             if new_url_found:
-                download_image(new_url_found, current_save_folder, f"flyer_page_{page_number}")
+                success = download_image(new_url_found, current_save_folder, f"flyer_page_{page_number}")
+                if success:
+                    images_downloaded_count += 1
                 seen_urls.add(new_url_found)
             else:
                 print("   Warning: No new image appeared. (End of flyer?)")
@@ -178,14 +212,29 @@ def scrape_netto_flyer():
                 print("Next button not found. Assuming end of flyer.")
                 break
             except Exception as e:
-                print(f"Error clicking next: {e}")
+                fatal_error_message = f"Error clicking next button: {e}"
+                print(fatal_error_message)
                 break
 
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        fatal_error_message = f"Unexpected fatal error: {e}"
+        print(fatal_error_message)
+
     finally:
         print("Closing WebDriver...")
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
+        
+        # --- FINAL LOGGING LOGIC ---
+        if fatal_error_message:
+            write_log_line("ERROR", fatal_error_message)
+        elif images_downloaded_count > 0:
+            write_log_line("SUCCESS", f"Downloaded {images_downloaded_count} new images.")
+        else:
+            write_log_line("NO_CHANGE", "Script ran successfully but no new images were downloaded.")
+        
         print("--- Scraper Finished ---")
 
 if __name__ == '__main__':
