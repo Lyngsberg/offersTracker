@@ -150,7 +150,7 @@ def scrape_netto_flyer():
             print(f"Could not find date text ({e}). Using default name.")
             subfolder_name = "unknown_date"
 
-        current_save_folder = os.path.join(BASE_DATA_FOLDER, subfolder_name)
+        current_save_folder = os.path.join(f'{BASE_DATA_FOLDER}raw/netto/', subfolder_name)
         os.makedirs(current_save_folder, exist_ok=True)
         print(f"Saving images to: '{current_save_folder}'")
         # ----------------------------------------------

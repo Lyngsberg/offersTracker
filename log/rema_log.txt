@@ -1,0 +1,2 @@
+[2026-01-14 18:11:33] [Error] Was not able to handle cookies properly
+[2026-01-14 18:30:19] [Error] Was not able to handle cookies properly

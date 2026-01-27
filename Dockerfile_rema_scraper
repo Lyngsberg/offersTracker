@@ -1,0 +1,51 @@
+# Use Python 3.12 on Debian 12 (Bookworm)
+FROM python:3.12-bookworm
+
+# Set working directory
+WORKDIR /app
+
+# STEP 1: Install Chromium and Dependencies
+# We switch to 'chromium-driver' (the package name in Debian 12)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-driver \
+    wget \
+    unzip \
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# STEP 2: Install Python dependencies
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# STEP 3: Copy source code
+COPY src /app/src/
+
+# ----------------------------------------------------
+# STEP 4: PERMISSIONS FIX & NON-ROOT USER SETUP (Crucial)
+# ----------------------------------------------------
+
+# 4a. Create a non-root user (appuser) with UID 1000
+# UID 1000 is typically the first standard user on Linux (your 'lyngsberg' user)
+# This allows the container to write files to your host system correctly.
+RUN groupadd -r appgroup && useradd -r -g appgroup -u 1000 appuser
+
+# 4b. Give 'appuser' ownership of the application code and the output folder.
+# We assume the output will be saved under /app/data (as per your mount).
+# Create the parent directory for the mount point if it doesn't exist yet
+RUN mkdir -p /app/data && \
+    chown -R appuser:appgroup /app
+
+# 4c. Switch to the non-root user for security and runtime.
+USER appuser
+
+# ----------------------------------------------------
+# STEP 5: Environment Variables (Unchanged)
+# ----------------------------------------------------
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROME_DRIVER=/usr/bin/chromedriver
+ENV PATH="/usr/bin:${PATH}"
+
+# STEP 6: Run the scraper (Unchanged)
+CMD ["python", "src/rema_scraper.py"]
